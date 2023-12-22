@@ -1,19 +1,11 @@
-FLAGS = -lusb-1.0
-USER = $(shell id -u)
-DIR = $(shell pwd)
-HOME = "/home/"$(shell logname)
+FLAGS = -lusb-1.0 -lX11 -lwayland-client
 
 install:
-	@if [ "${USER}" = "0" ]; then\
-		${CC} KD100.c ${FLAGS} -o /bin/KD100;\
-		mkdir "${HOME}/.config/KD100";\
-		cp "default.cfg" "${HOME}/.config/KD100/";\
-		chmod a+wr "${HOME}/.config/KD100/default.cfg";\
-		echo "Default config file is located in: ${HOME}/.config/KD100/";\
-	else\
-		${CC} KD100.c ${FLAGS} -o KD100;\
-	fi
-
-
+	${CC} KD100.c ${FLAGS} -o KD100;
 clean:
 	rm -f KD100
+	rm -f ./debian-dpkg/usr/local/bin/KD100
+	rm -f huion-k20-kd100.deb
+deb:
+	${CC} KD100.c ${FLAGS} -o ./debian-dpkg/usr/local/bin/KD100;
+	dpkg-deb --build debian-dpkg huion-k20-kd100.deb

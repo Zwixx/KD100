@@ -1,0 +1,5 @@
+Package: huion-kd100-k20
+Version: 1.4.1
+Maintainer: mckset
+Architecture: i386
+Description: Huion KD100 / K20 Linux Driver

@@ -12,6 +12,8 @@
 #include <string.h>
 #include <unistd.h>
 #include <pwd.h>
+#include <X11/Xlib.h>
+#include <wayland-client-core.h>
 
 int keycodes[] = {1, 2, 4, 8, 16, 32, 64, 128, 129, 130, 132, 136, 144, 160, 192, 256, 257, 258, 260, 641, 642};
 char* file = "default.cfg";
@@ -31,10 +33,22 @@ struct wheel {
 
 void GetDevice(int, int, int);
 void Handler(char*, int);
+void HandlerX11(char*, int);
+void HandlerWayland(char*, int);
 char* Substring(char*, int, int);
 
 const int vid = 0x256c;
-const int pid = 0x006d;
+const int pid[2] = {0x006d, 0x0069};
+
+typedef enum System {
+  X11,
+  WAYLAND,
+  NONE
+} System;
+
+System getWindowSystem();
+
+System windowsystem = NONE;
 
 void GetDevice(int debug, int accept, int dry){
 	int err=0, wheelFunction=0, button=-1, totalButtons=0, wheelType=0, leftWheels=0, rightWheels=0, totalWheels=0;
@@ -185,7 +199,7 @@ void GetDevice(int debug, int accept, int dry){
 				if (debug > 0){
 					printf("Unable to retrieve info from device #%d. Ignoring...\n", d);
 				}
-			}else if (devDesc.idVendor == vid && devDesc.idProduct == pid){
+			}else if (devDesc.idVendor == vid && (devDesc.idProduct == pid[0] || devDesc.idProduct == pid[1])){
 				if (accept == 1){
 					if (uid != 0){
 						err=libusb_open(dev, &handle);
@@ -198,7 +212,7 @@ void GetDevice(int debug, int accept, int dry){
 							}
 						}
 						if (debug > 0){
-							printf("\nUsing: %04x:%04x (Bus: %03d Device: %03d)\n", vid, pid, libusb_get_bus_number(dev), libusb_get_device_address(dev));
+							printf("\nUsing: %04x:%04x (Bus: %03d Device: %03d)\n", devDesc.idVendor, devDesc.idProduct, libusb_get_bus_number(dev), libusb_get_device_address(dev));
 						}
 						break;
 					}else{ // If the driver is ran as root, it can safely execute the following
@@ -209,7 +223,7 @@ void GetDevice(int debug, int accept, int dry){
 						}
 						err = libusb_get_string_descriptor_ascii(handle, devDesc.iProduct, info, 200);
 						if (debug > 0){
-							printf("\n#%d | %04x:%04x : %s\n", d, vid, pid, info);
+							printf("\n#%d | %04x:%04x : %s\n", d, devDesc.idVendor, devDesc.idProduct, info);
 						}
 						if (strlen(info) == 0 || strcmp("Huion Tablet_KD100", info) == 0){
 							break;
@@ -419,8 +433,25 @@ void GetDevice(int debug, int accept, int dry){
 	}
 }
 
-
 void Handler(char* key, int type){
+	switch(windowsystem) {
+		X11: 
+			HandlerX11(key, type);
+			break;
+		WAYLAND: 
+			HandlerWayland(key, type);
+			break;
+		default:
+			printf("Wayland or X11 not found.");
+			break;
+	}
+}
+
+void HandlerWayland(char* key, int type){
+	system("Not implemented yet...");
+}
+
+void HandlerX11(char* key, int type){
 	if (strcmp(key, "NULL") == 0)
 		return;
 
@@ -455,7 +486,7 @@ void Handler(char* key, int type){
 			temp[strlen(cmd)+2] = '\0';
 		}
 		system(temp);
-	}
+	}	
 }
 
 char* Substring(char* in, int start, int end){
@@ -471,6 +502,18 @@ char* Substring(char* in, int start, int end){
 
 
 int main(int args, char *in[]){
+	windowsystem = getWindowSystem();
+	switch(windowsystem) {
+		X11: 
+			printf("X11 identified.");
+			break;
+		WAYLAND: 
+			printf("Wayland identified.");
+			break;
+		default:
+			printf("Wayland or X11 not found.");
+			break;
+	}
 	int debug=0, accept=0, dry=0, err;
 
 	err = system("xdotool sleep 0.01");
@@ -482,7 +525,7 @@ int main(int args, char *in[]){
 	for (int arg = 1; arg < args; arg++){
 		if (strcmp(in[arg],"-h") == 0 || strcmp(in[arg],"--help") == 0){
 			printf("Usage: KD100 [option]...\n");
-			printf("\t-a\t\tAssume the first device that matches %04x:%04x is the Keydial\n", vid, pid);
+			printf("\t-a\t\tAssume the first device that matches %04x:%04x is the Keydial\n", vid, pid[0]);
 			printf("\t-c [path]\tSpecifies a config file to use\n");
 			printf("\t-d [-d]\t\tEnable debug outputs (use twice to view data sent by the device)\n");
 			printf("\t-dry \t\tDisplay data sent by the device without sending events\n");
@@ -521,4 +564,21 @@ int main(int args, char *in[]){
 	GetDevice(debug, accept, dry);
 	libusb_exit(ctx);
 	return 0;
+}
+
+System getWindowSystem() {
+    Display *display = XOpenDisplay(NULL);
+    if (display != NULL) {
+        XCloseDisplay(display);
+        return X11;
+    } else {
+		struct wl_display *display = wl_display_connect(NULL);
+        if (display != NULL) {
+			wl_display_disconnect(display);
+            return WAYLAND;
+        } else {
+            return NONE;
+        }
+    }
+    return NONE;
 }
