@@ -13,5 +13,7 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
+    - name: install libusb-dev
+      run: apt-get install libusb-1.0-0-dev xdotool -y
     - name: make
       run: make
