@@ -247,7 +247,7 @@ void GetDevice(int debug, int accept, int dry){
 				system("lsusb");
 				printf("\n");
 				for(d=0; d < devI; d++){
-					printf("%d) %04x:%04x (Bus: %03d Device: %03d)\n", d, vid, pid, libusb_get_bus_number(savedDevs[d]), libusb_get_device_address(savedDevs[d]));
+					printf("%d) %04x:%04x (Bus: %03d Device: %03d)\n", d, vid, pid[0], libusb_get_bus_number(savedDevs[d]), libusb_get_device_address(savedDevs[d]));
 				}
 				printf("Select a device to use: ");
 				fflush(stdout);
