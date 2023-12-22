@@ -1,5 +1,5 @@
 /*
-	V1.4.1
+	V1.4.2
 	https://github.com/mckset/KD100.git
 	KD100 Linux driver for X11 desktops
 	Other devices can be supported by modifying the code to read data received by the device
@@ -10,7 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include<unistd.h>
+#include <unistd.h>
 #include <pwd.h>
 
 int keycodes[] = {1, 2, 4, 8, 16, 32, 64, 128, 129, 130, 132, 136, 144, 160, 192, 256, 257, 258, 260, 641, 642};
@@ -455,7 +455,7 @@ void Handler(char* key, int type){
 			temp[strlen(cmd)+2] = '\0';
 		}
 		system(temp);
-	}	
+	}
 }
 
 char* Substring(char* in, int start, int end){
