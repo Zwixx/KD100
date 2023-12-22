@@ -7,11 +7,11 @@ Pre-Installation
 ------------
 Arch Linux/Manjaro:
 ```
-sudo pacman -S libusb-1.0 xdotool
+sudo pacman -S libusb-1.0 xdotool libx11
 ```
 Ubuntu/Debian/Pop OS:
 ```
-sudo apt-get install libusb-1.0-0-dev xdotool
+sudo apt-get install libusb-1.0-0-dev xdotool libx11-dev libwayland-dev
 ```
 > **_NOTE:_**  Some distros label libusb as "libusb-1.0-0" and others might require the separate "libusb-1.0-dev" package
 
@@ -41,6 +41,15 @@ sudo ./KD100 [options]
 
 **-h**  Displays a help message
 
+Create .deb package
+-------------------
+
+Creates a Debian Package, that's installs the binary and set udev-Rules for all Users.
+
+```
+make deb
+```
+
 Configuring
 ----------
 Edit or copy **default.cfg** to add your own keys/commands and use the **-c** flag to specify the location of the config file. New config files do not need to end in ".cfg". If the config file is not found in the current directory, the driver while look for it in ~/.config/KD100/
@@ -48,9 +57,10 @@ Edit or copy **default.cfg** to add your own keys/commands and use the **-c** fl
 Caveats
 -------
 - Because the driver relies on xdotool, it only works on X11 desktops but it can be patched for wayland desktops by altering the "handler" function
-- You do not need to run this with sudo if you set a udev rule for the device. Create/edit a rule file in /etc/udev/rules.d/ and add the following:
+- You do not need to run this with sudo if you set a udev rule for the device. Create/edit a .rules (for example 99-huion.rules) file in /etc/udev/rules.d/ and add the following:
 ```
 SUBSYSTEM=="usb",ATTRS{idVendor}=="256c",ATTRS{idProduct}=="006d",MODE="0666"
+SUBSYSTEM=="usb",ATTRS{idVendor}=="256c",ATTRS{idProduct}=="0069",MODE="0666"
 ```
 Save and then reboot or reload your udev rules with:
 ```
@@ -67,6 +77,7 @@ Tested Distros
 - Manjaro
 - Ubuntu
 - Pop OS
+- Kali Linux
 
 Known Issues
 ------------
