@@ -434,6 +434,7 @@ void GetDevice(int debug, int accept, int dry){
 }
 
 void Handler(char* key, int type){
+	printf("Dings und bums.");
 	switch(windowsystem) {
 		X11: 
 			HandlerX11(key, type);
@@ -448,7 +449,7 @@ void Handler(char* key, int type){
 }
 
 void HandlerWayland(char* key, int type){
-	system("Not implemented yet...");
+	printf("Not implemented yet...");
 }
 
 void HandlerX11(char* key, int type){
@@ -502,18 +503,7 @@ char* Substring(char* in, int start, int end){
 
 
 int main(int args, char *in[]){
-	windowsystem = getWindowSystem();
-	switch(windowsystem) {
-		X11: 
-			printf("X11 identified.");
-			break;
-		WAYLAND: 
-			printf("Wayland identified.");
-			break;
-		default:
-			printf("Wayland or X11 not found.");
-			break;
-	}
+	windowsystem = NONE;
 	int debug=0, accept=0, dry=0, err;
 
 	err = system("xdotool sleep 0.01");
@@ -551,6 +541,17 @@ int main(int args, char *in[]){
 				return -8;
 			}
 		}
+		if (strcmp(in[arg], "-wayland") == 0){
+			windowsystem = WAYLAND;
+		}
+		if (strcmp(in[arg], "-x11") == 0){
+			windowsystem = X11;
+		}
+	}
+
+	if (windowsystem == NONE) {
+		printf("Error: No Display Manager selected.\n");
+		return 1;
 	}
 
 	libusb_context *ctx;
@@ -564,21 +565,4 @@ int main(int args, char *in[]){
 	GetDevice(debug, accept, dry);
 	libusb_exit(ctx);
 	return 0;
-}
-
-System getWindowSystem() {
-    Display *display = XOpenDisplay(NULL);
-    if (display != NULL) {
-        XCloseDisplay(display);
-        return X11;
-    } else {
-		struct wl_display *display = wl_display_connect(NULL);
-        if (display != NULL) {
-			wl_display_disconnect(display);
-            return WAYLAND;
-        } else {
-            return NONE;
-        }
-    }
-    return NONE;
 }
