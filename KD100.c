@@ -31,7 +31,7 @@ struct wheel {
 	char* left;
 };
 
-void GetDevice(int, int, int);
+void GetDevice(int, int, int, libusb_context *ctx);
 void Handler(char*, int);
 void HandlerX11(char*, int);
 void HandlerWayland(char*, int);
@@ -50,7 +50,7 @@ System getWindowSystem();
 
 System windowsystem = NONE;
 
-void GetDevice(int debug, int accept, int dry){
+void GetDevice(int debug, int accept, int dry, libusb_context *ctx){
 	int err=0, wheelFunction=0, button=-1, totalButtons=0, wheelType=0, leftWheels=0, rightWheels=0, totalWheels=0;
 	char* data = malloc(512*sizeof(char)); // Data received from the config file and the USB
 	event* events = malloc(1*sizeof(*events)); // Stores key events and functions
@@ -70,7 +70,7 @@ void GetDevice(int debug, int accept, int dry){
 	}		
 
 	// Load config file
-	if (debug == 1){
+	if (debug >= 1){
 		printf("Loading config...\n");
 	}
 	
@@ -181,7 +181,7 @@ void GetDevice(int debug, int accept, int dry){
 		struct libusb_config_descriptor *desc; // USB description (For claiming interfaces)
 		libusb_device_handle *handle = NULL; // USB handle
 
-		err = libusb_get_device_list(NULL, &devs);
+		err = libusb_get_device_list(ctx, &devs);
 		if (err < 0){
 			printf("Unable to retrieve USB devices. Exitting...\n");
 			return;
@@ -193,7 +193,7 @@ void GetDevice(int debug, int accept, int dry){
 		libusb_device *savedDevs[sizeof(devs)];
 		while ((dev = devs[d++]) != NULL){
 			struct libusb_device_descriptor devDesc;
-			unsigned char info[200] = "";
+			char info[200] = "";
 			err = libusb_get_device_descriptor(dev, &devDesc);
 			if (err < 0){
 				if (debug > 0){
@@ -221,7 +221,7 @@ void GetDevice(int debug, int accept, int dry){
 							printf("\nUnable to open device. Error: %d\n", err);
 							handle=NULL;
 						}
-						err = libusb_get_string_descriptor_ascii(handle, devDesc.iProduct, info, 200);
+						err = libusb_get_string_descriptor_ascii(handle, devDesc.iProduct, (unsigned char *) info, 200);
 						if (debug > 0){
 							printf("\n#%d | %04x:%04x : %s\n", d, devDesc.idVendor, devDesc.idProduct, info);
 						}
@@ -297,13 +297,13 @@ void GetDevice(int debug, int accept, int dry){
 			interfaces = desc->bNumInterfaces;
 			libusb_free_config_descriptor(desc);
 			libusb_set_auto_detach_kernel_driver(handle, 1);
-			if (debug == 1)
+			if (debug >= 1)
 				printf("Claiming interfaces... \n");
 
 			for (int x = 0; x < interfaces; x++){
 				libusb_kernel_driver_active(handle, x);
 				int err = libusb_claim_interface(handle, x);
-				if (err != LIBUSB_SUCCESS && debug == 1)
+				if (err != LIBUSB_SUCCESS && debug >= 1)
 					printf("Failed to claim interface %d\n", x);
 			}
 
@@ -331,7 +331,7 @@ void GetDevice(int debug, int accept, int dry){
 				if (err == -1)
 					printf("\nDEVICE IS ALREADY IN USE\n");
 				if (err < 0){
-					if (debug == 1){
+					if (debug >= 1){
 						printf("Unable to retrieve data: %d\n", err);
 					}
 					break;
@@ -350,7 +350,7 @@ void GetDevice(int debug, int accept, int dry){
 					keycode = 0;
 
 				// Compare keycodes to data and trigger events
-				if (debug == 1 && keycode != 0){
+				if (debug >= 1 && keycode != 0){
 					printf("Keycode: %d\n", keycode);
 				}
 				if (keycode == 0 && prevEvent.type != 0){ // Reset key held
@@ -388,7 +388,7 @@ void GetDevice(int debug, int accept, int dry){
 										wheelFunction++;
 									}else
 										wheelFunction=0;
-									if (debug == 1){
+									if (debug >= 1){
 										printf("Function: %s | %s\n", wheelEvents[wheelFunction].left, wheelEvents[wheelFunction].right);
 									}
 								}else if (strcmp(events[k].function, "mouse1") == 0 || strcmp(events[k].function, "mouse2") == 0 || strcmp(events[k].function, "mouse3") == 0 || strcmp(events[k].function, "mouse4") == 0 || strcmp(events[k].function, "mouse5") == 0){
@@ -420,7 +420,7 @@ void GetDevice(int debug, int accept, int dry){
 
 			// Cleanup
 			for (int x = 0; x<interfaces; x++) {
-				if (debug == 1){
+				if (debug >= 1){
 					printf("Releasing interface %d...\n", x);
 				}
 				libusb_release_interface(handle, x);
@@ -434,7 +434,6 @@ void GetDevice(int debug, int accept, int dry){
 }
 
 void Handler(char* key, int type){
-	printf("Dings und bums.");
 	switch(windowsystem) {
 		X11: 
 			HandlerX11(key, type);
@@ -562,7 +561,7 @@ int main(int args, char *in[]){
 	}
 	// Uncomment to enable libusb debug messages
 	// libusb_set_option(ctx, LIBUSB_OPTION_LOG_LEVEL, 1);
-	GetDevice(debug, accept, dry);
+	GetDevice(debug, accept, dry, ctx);
 	libusb_exit(ctx);
 	return 0;
 }

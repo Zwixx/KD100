@@ -1,7 +1,7 @@
 FLAGS = -lusb-1.0 -lX11 -lwayland-client
 
 install:
-	${CC} KD100.c ${FLAGS} -o KD100;
+	${CC} KD100.c ${FLAGS} -o KD100 -pedantic;
 clean:
 	rm -f KD100
 	rm -f ./debian-dpkg/usr/local/bin/KD100
