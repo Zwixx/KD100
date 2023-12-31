@@ -1,3 +1,4 @@
 KD100
 *.deb
 .vscode
+.kdev4
