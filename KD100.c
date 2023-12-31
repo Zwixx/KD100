@@ -50,50 +50,35 @@ System getWindowSystem();
 
 System windowsystem = NONE;
 
-void GetDevice(int debug, int accept, int dry, libusb_context *ctx){
-	int err=0, wheelFunction=0, button=-1, totalButtons=0, wheelType=0, leftWheels=0, rightWheels=0, totalWheels=0;
-	char* data = malloc(512*sizeof(char)); // Data received from the config file and the USB
-	event* events = malloc(1*sizeof(*events)); // Stores key events and functions
-	wheel* wheelEvents = malloc(1*sizeof(wheel)); // Stores wheel functions
-	event prevEvent;
-	uid_t uid=getuid(); // Used to check if the driver was ran as root
-
-	// Not important
-	int c=0; // Index of the loading character to display when waiting for a device
-
-	system("clear");
-
-	if (debug > 0){
-		if (debug > 2)
-			debug=2;
-		printf("Version 1.4.1\nDebug level: %d\n", debug);
-	}		
+int readConfigfile(event* events, wheel* wheelEvents, int debug) {
+	int button=-1, totalButtons=0, wheelType=0, leftWheels=0, rightWheels=0, totalWheels=0;
 
 	// Load config file
 	if (debug >= 1){
 		printf("Loading config...\n");
 	}
-	
+
+	char* data = malloc(512*sizeof(char)); // Data received from the config file and the USB
 	FILE *f;
 	if (strcmp(file, "default.cfg")){
 		f = fopen(file, "r");
 		if (f == NULL){
-                        char* home = getpwuid(getuid())->pw_dir;
-                        char* config = "/.config/KD100/";
-                        char temp[strlen(home)+strlen(config)+strlen(file)+1];
-                        for (int i = 0; i < strlen(home); i++)
-                                temp[i] = home[i];
-                        for (int i = 0; i < strlen(config); i++)
-                                temp[i+strlen(home)] = config[i];
-                        for (int i = 0; i < strlen(file); i++)
-                                temp[i+strlen(home)+strlen(config)] = file[i];
-                        temp[strlen(home)+strlen(config)+strlen(file)] = '\0';
-                        f = fopen(temp, "r");
-                        if (f == NULL){
-                                printf("CONFIG FILE NOT FOUND\n");
-                                return;
-                        }
-                }
+			char* home = getpwuid(getuid())->pw_dir;
+			char* config = "/.config/KD100/";
+			char temp[strlen(home)+strlen(config)+strlen(file)+1];
+			for (int i = 0; i < strlen(home); i++)
+				temp[i] = home[i];
+			for (int i = 0; i < strlen(config); i++)
+				temp[i+strlen(home)] = config[i];
+			for (int i = 0; i < strlen(file); i++)
+				temp[i+strlen(home)+strlen(config)] = file[i];
+			temp[strlen(home)+strlen(config)+strlen(file)] = '\0';
+			f = fopen(temp, "r");
+			if (f == NULL){
+				printf("CONFIG FILE NOT FOUND\n");
+				return 0;
+			}
+		}
 	}else{
 		f = fopen(file, "r");
 		if (f == NULL){
@@ -110,7 +95,7 @@ void GetDevice(int debug, int accept, int dry, libusb_context *ctx){
 			if (f == NULL){
 				printf("DEFAULT CONFIGS ARE MISSING!\n");
 				printf("Please add default.cfg to %s/.config/KD100/ or specify a file to use with -c\n", home);
-				return;
+				return 0;
 			}
 		}
 	}
@@ -151,14 +136,14 @@ void GetDevice(int debug, int accept, int dry, libusb_context *ctx){
 						wheelEvents[leftWheels].right = "NULL";
 					}
 					leftWheels++;
-				}	
+				}
 				break;
 			}else if (strcmp(Substring(data, i, 6), "Wheel ") == 0){
 				wheelType++;
 			}
 		}
 	}
-	wheelFunction=0;
+
 	if (rightWheels > leftWheels)
 		totalWheels = rightWheels;
 	else
@@ -173,6 +158,29 @@ void GetDevice(int debug, int accept, int dry, libusb_context *ctx){
 		printf("\n");
 	}
 	free(data);
+	return totalWheels;
+}
+
+void GetDevice(int debug, int accept, int dry, libusb_context *ctx){
+	event* events = malloc(1*sizeof(*events)); // Stores key events and functions
+	wheel* wheelEvents = malloc(1*sizeof(wheel)); // Stores wheel functions
+
+	if (debug > 0){
+		if (debug > 2)
+			debug=2;
+		printf("Version 1.4.1\nDebug level: %d\n", debug);
+	}		
+
+	int totalWheels = readConfigfile(events, wheelEvents, debug);
+	if (totalWheels == 0) {
+		return;
+	}
+
+	// Not important
+	int c=0; // Index of the loading character to display when waiting for a device
+	int err=0, wheelFunction=0;
+	event prevEvent;
+	uid_t uid=getuid(); // Used to check if the driver was ran as root
 	int devI = 0;
 	char indi[] = "|/-\\";
 	while (err == 0 || err == LIBUSB_ERROR_NO_DEVICE){
@@ -188,7 +196,7 @@ void GetDevice(int debug, int accept, int dry, libusb_context *ctx){
 		}
 
 		// Gets a list of devices and looks for ones that have the same vid and pid
-		int d=0, found=0;
+		int d=0;
 		devI=0;
 		libusb_device *savedDevs[sizeof(devs)];
 		while ((dev = devs[d++]) != NULL){
@@ -212,26 +220,18 @@ void GetDevice(int debug, int accept, int dry, libusb_context *ctx){
 							}
 						}
 						if (debug > 0){
-							printf("\nUsing: %04x:%04x (Bus: %03d Device: %03d)\n", devDesc.idVendor, devDesc.idProduct, libusb_get_bus_number(dev), libusb_get_device_address(dev));
+							struct libusb_device_descriptor desc;
+							int ret = libusb_get_device_descriptor(dev, &desc);
+							libusb_device_handle *handle;
+							if (libusb_open(dev, &handle) == LIBUSB_SUCCESS) {
+								libusb_get_string_descriptor_ascii(handle, devDesc.iProduct, (unsigned char *) info, sizeof(info));
+
+								printf("\nUsing: %04x:%04x (Bus: %03d Device: %03d) Name: %s\n", devDesc.idVendor, devDesc.idProduct, libusb_get_bus_number(dev), libusb_get_device_address(dev), info);
+
+								libusb_close(handle);
+							}
 						}
 						break;
-					}else{ // If the driver is ran as root, it can safely execute the following
-						err = libusb_open(dev, &handle);
-						if (err < 0){
-							printf("\nUnable to open device. Error: %d\n", err);
-							handle=NULL;
-						}
-						err = libusb_get_string_descriptor_ascii(handle, devDesc.iProduct, (unsigned char *) info, 200);
-						if (debug > 0){
-							printf("\n#%d | %04x:%04x : %s\n", d, devDesc.idVendor, devDesc.idProduct, info);
-						}
-						if (strlen(info) == 0 || strcmp("Huion Tablet_KD100", info) == 0){
-							break;
-						}else{
-							libusb_close(handle);
-							handle = NULL;
-							found++;
-						}
 					}
 				}else{
 					savedDevs[devI] = dev;
@@ -256,7 +256,6 @@ void GetDevice(int debug, int accept, int dry, libusb_context *ctx){
 				if (in >= devI || in < 0){
 					in=-1;
 				}
-				system("clear");
 			}
 			err=libusb_open(savedDevs[in], &handle);
 			if (err < 0){
@@ -267,10 +266,6 @@ void GetDevice(int debug, int accept, int dry, libusb_context *ctx){
 					return;
 				}
 			}
-		}else if (found > 0){
-			printf("Error: Found device does not appear to be the keydial\n");
-			printf("Try running without the -a flag\n");
-			return;
 		}
 
 		int interfaces=0;
@@ -284,10 +279,6 @@ void GetDevice(int debug, int accept, int dry, libusb_context *ctx){
 			}
 			err = LIBUSB_ERROR_NO_DEVICE;
 		}else{ // Claims the device and starts the driver
-			if (debug == 0){
-				system("clear");
-			}
-
 			interfaces = 0;
 			printf("Starting driver...\n");
 
