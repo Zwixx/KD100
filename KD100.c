@@ -11,15 +11,25 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <stdbool.h>
 #include <pwd.h>
 #include <X11/Xlib.h>
 #include <wayland-client-core.h>
+#include "macros.h"
 
 int keycodes[] = {1, 2, 4, 8, 16, 32, 64, 128, 129, 130, 132, 136, 144, 160, 192, 256, 257, 258, 260, 641, 642};
 char* file = "default.cfg";
 
 typedef struct event event;
 typedef struct wheel wheel;
+typedef struct modelInfo modelInfo;
+
+enum displayserver {
+  X11,
+  WAYLAND,
+  NONE
+};
+typedef enum displayserver displayserver;
 
 struct event{
 	int type;
@@ -31,6 +41,19 @@ struct wheel {
 	char* left;
 };
 
+struct modelInfo {
+	int productId;
+	int vendorId;
+	int port;
+	int keycodes[21];
+};
+
+modelInfo models[2] = {{ // KD100
+	.vendorId = 0x256c, .productId = 0x006d, .port = 0x81, .keycodes = {1, 2, 4, 8, 16, 32, 64, 128, 129, 130, 132, 136, 144, 160, 192, 256, 257, 258, 260, 641, 642}
+},{ // K20 KeyDial
+	.vendorId = 0x256c, .productId = 0x0069, .port = 0x82, .keycodes = {1, 2, 4, 8, 16, 32, 64, 128, 129, 130, 132, 136, 144, 160, 192, 256, 257, 258, 260, 641, 642}
+}};
+
 void GetDevice(int, int, int, libusb_context *ctx);
 void Handler(char*, int);
 void HandlerX11(char*, int);
@@ -40,15 +63,9 @@ char* Substring(char*, int, int);
 const int vid = 0x256c;
 const int pid[2] = {0x006d, 0x0069};
 
-typedef enum System {
-  X11,
-  WAYLAND,
-  NONE
-} System;
+displayserver getWindowSystem();
 
-System getWindowSystem();
-
-System windowsystem = NONE;
+displayserver windowsystem = NONE;
 
 int readConfigfile(event* events, wheel* wheelEvents, int debug) {
 	int button=-1, totalButtons=0, wheelType=0, leftWheels=0, rightWheels=0, totalWheels=0;
@@ -161,6 +178,25 @@ int readConfigfile(event* events, wheel* wheelEvents, int debug) {
 	return totalWheels;
 }
 
+bool checkDevice(int vendor, int product) {
+	for(int i = 0; i < array_size(models); i++) {
+		if (models[i].vendorId == vendor && models[i].productId == product) {
+			return true;
+		}
+	}
+	return false;
+}
+
+modelInfo getDeviceModel(int vendor, int product) {
+	for(int i = 0; i < array_size(models); i++) {
+		if (models[i].vendorId == vendor && models[i].productId == product) {
+			return models[i];
+		}
+	}
+	modelInfo res = {0x0, 0x0, 0x0};
+	return res;
+}
+
 void GetDevice(int debug, int accept, int dry, libusb_context *ctx){
 	event* events = malloc(1*sizeof(*events)); // Stores key events and functions
 	wheel* wheelEvents = malloc(1*sizeof(wheel)); // Stores wheel functions
@@ -199,6 +235,7 @@ void GetDevice(int debug, int accept, int dry, libusb_context *ctx){
 		int d=0;
 		devI=0;
 		libusb_device *savedDevs[sizeof(devs)];
+		modelInfo model;
 		while ((dev = devs[d++]) != NULL){
 			struct libusb_device_descriptor devDesc;
 			char info[200] = "";
@@ -207,32 +244,31 @@ void GetDevice(int debug, int accept, int dry, libusb_context *ctx){
 				if (debug > 0){
 					printf("Unable to retrieve info from device #%d. Ignoring...\n", d);
 				}
-			}else if (devDesc.idVendor == vid && (devDesc.idProduct == pid[0] || devDesc.idProduct == pid[1])){
+			}else if (checkDevice(devDesc.idVendor, devDesc.idProduct)) {
+				model = getDeviceModel(devDesc.idVendor, devDesc.idProduct);
 				if (accept == 1){
-					if (uid != 0){
-						err=libusb_open(dev, &handle);
-						if (err < 0){
-							printf("\nUnable to open device. Error: %d\n", err);
-							handle=NULL;
-							if (err == LIBUSB_ERROR_ACCESS){
-								printf("Error: Permission denied\n");
-								return;
-							}
+					err=libusb_open(dev, &handle);
+					if (err < 0){
+						printf("\nUnable to open device. Error: %d\n", err);
+						handle=NULL;
+						if (err == LIBUSB_ERROR_ACCESS){
+							printf("Error: Permission denied\n");
+							return;
 						}
-						if (debug > 0){
-							struct libusb_device_descriptor desc;
-							int ret = libusb_get_device_descriptor(dev, &desc);
-							libusb_device_handle *handle;
-							if (libusb_open(dev, &handle) == LIBUSB_SUCCESS) {
-								libusb_get_string_descriptor_ascii(handle, devDesc.iProduct, (unsigned char *) info, sizeof(info));
-
-								printf("\nUsing: %04x:%04x (Bus: %03d Device: %03d) Name: %s\n", devDesc.idVendor, devDesc.idProduct, libusb_get_bus_number(dev), libusb_get_device_address(dev), info);
-
-								libusb_close(handle);
-							}
-						}
-						break;
 					}
+					if (debug > 0){
+						struct libusb_device_descriptor desc;
+						int ret = libusb_get_device_descriptor(dev, &desc);
+						libusb_device_handle *handle;
+						if (libusb_open(dev, &handle) == LIBUSB_SUCCESS) {
+							libusb_get_string_descriptor_ascii(handle, devDesc.iProduct, (unsigned char *) info, sizeof(info));
+
+							printf("\nUsing: %04x:%04x (Bus: %03d Device: %03d) Name: %s\n", devDesc.idVendor, devDesc.idProduct, libusb_get_bus_number(dev), libusb_get_device_address(dev), info);
+
+							libusb_close(handle);
+						}
+					}
+					break;
 				}else{
 					savedDevs[devI] = dev;
 					devI++;
@@ -306,7 +342,7 @@ void GetDevice(int debug, int accept, int dry, libusb_context *ctx){
 			while (err >=0){ // Listen for events
 				unsigned char data[40]; // Stores device input
 				int keycode = 0; // Keycode read from the device
-				err = libusb_interrupt_transfer(handle, 0x81, data, sizeof(data), NULL, 0); // Get data
+				err = libusb_interrupt_transfer(handle, model.port, data, sizeof(data), NULL, 0); // Get data
 
 				// Potential errors
 				if (err == LIBUSB_ERROR_TIMEOUT)
@@ -426,7 +462,7 @@ void GetDevice(int debug, int accept, int dry, libusb_context *ctx){
 
 void Handler(char* key, int type){
 	switch(windowsystem) {
-		X11: 
+		X11:
 			HandlerX11(key, type);
 			break;
 		WAYLAND: 
